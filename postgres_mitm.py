@@ -18,6 +18,9 @@ from __future__ import print_function
 # fields on the IP packets or similar, depending on how you're performing the
 # attack.
 
+# PS: Please don't look to this script for examples of how to write good socket
+# code, this is just a quick proof of concept.
+
 import argparse
 import hashlib
 import socket
