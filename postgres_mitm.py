@@ -126,7 +126,11 @@ class ClientConnection(threading.Thread):
 
     def __init__(self, client_socket, target_backend):
         super(ClientConnection, self).__init__()
-        self.ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+        for proto in ('PROTOCOL_TLSv1_2', 'PROTOCOL_TLSv1', 'PROTOCOL_SSLv23'):
+            protocol = getattr(ssl, proto, None)
+            if protocol:
+                break
+        self.ssl_context = ssl.SSLContext(protocol)
         self.ssl_context.load_cert_chain(certfile='server.cert', keyfile='server.key')
         self.socket = client_socket
         self.target_backend = target_backend
