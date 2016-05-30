@@ -27,7 +27,6 @@ import socket
 import ssl
 import select
 import struct
-import sys
 import threading
 import time
 import logging
