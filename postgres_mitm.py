@@ -131,16 +131,28 @@ class ClientConnection(threading.Thread):
                 _logger.warning('No more data received')
                 raise Exception('No more data')
             _logger.debug('Using select to wait for data')
-            while 1:
+            while True:
                 sockets_with_data = select.select([self.server_socket, self.socket], [], [])[0]
                 if self.socket in sockets_with_data:
                     data = self.socket.read()
                     _logger.debug('Client -> Server: %s' % repr(data))
-                    self.server_socket.send(data)
+                    if data:
+                        self.server_socket.send(data)
+                    else:
+                        self.socket.close()
+                        self.server_socket.shutdown(socket.SHUT_RDWR)
+                        self.server_socket.close()
+                        break
                 if self.server_socket in sockets_with_data:
                     data = self.server_socket.read()
                     _logger.debug('Server -> Client: %s' % repr(data))
-                    self.socket.send(data)
+                    if data:
+                        self.socket.send(data)
+                    else:
+                        self.socket.shutdown(socket.SHUT_RDWR)
+                        self.socket.close()
+                        self.server_socket.shutdown(socket.SHUT_RDWR)
+                        self.server_socket.close()
         finally:
             self.terminate()
 
@@ -238,12 +250,20 @@ class ClientConnection(threading.Thread):
 
 
     def terminate(self):
-        _logger.debug('Shutting down client socket')
-        try:
-            self.socket.shutdown(socket.SHUT_RDWR)
-            self.socket.close()
-        except:
-            pass
+        _logger.debug('Terminating thread')
+        for sock in (self.socket, self.server_socket):
+            if not sock:
+                continue
+            try:
+                if not socket_is_closed(self.socket):
+                    self.socket.shutdown(socket.SHUT_RDWR)
+                self.socket.close()
+            except:
+                _logger.exception('Got exception when trying to close socket')
+
+
+def socket_is_closed(sock):
+    return isinstance(sock._sock, socket._closedsocket)
 
 
 def create_md5_auth_packet(username, password, salt):
