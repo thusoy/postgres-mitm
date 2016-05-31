@@ -32,7 +32,8 @@ import threading
 import logging
 from collections import namedtuple
 
-# Sent by client when requesting TLS connection
+# Sent by client when requesting TLS connection (this is the magic version
+# 1234.5679 of the protocol, defined in pgcomm.h)
 SSL_STARTUP_REQUEST = '\x00\x00\x00\x08\x04\xd2\x16\x2f'
 SSL_STARTUP_RESPONSE = 'S'
 VERSION_3 = '\x00\x03\x00\x00'
