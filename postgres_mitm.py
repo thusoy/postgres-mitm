@@ -133,8 +133,6 @@ class ClientConnection(threading.Thread):
         self.target_backend = target_backend
         self.server_socket = None
         self._stop = threading.Event()
-        self.unread_client_data = ''
-        self.buffer_size = 4096
 
 
     def stop(self):
@@ -236,25 +234,9 @@ class ClientConnection(threading.Thread):
 
 
     def read_n_bytes_from_client(self, n):
-        chunks = []
-        bytes_read = 0
+        return read_n_bytes_from_socket(self.socket, n)
 
-        if self.unread_client_data:
-            bytes_read += len(self.unread_client_data)
-            _logger.debug('Already had %d bytes from client', bytes_read)
-            chunks.append(self.unread_client_data)
-            self.unread_client_data = ''
 
-        while bytes_read < n:
-            chunk = self.socket.recv(self.buffer_size)
-            if not chunk:
-                raise Exception('Not enough data read')
-            chunks.append(chunk)
-            bytes_read += len(chunk)
-
-        received_so_far = ''.join(chunks)
-        self.unread_client_data = received_so_far[n:]
-        return received_so_far[:n]
 
 
     def send_to_client(self, msg):
@@ -360,6 +342,16 @@ class ClientConnection(threading.Thread):
 
 def socket_is_closed(sock):
     return isinstance(sock._sock, socket._closedsocket)
+
+
+def read_n_bytes_from_socket(sock, n):
+    buf = bytearray(n)
+    view = memoryview(buf)
+    while n:
+        nbytes = sock.recv_into(view, n)
+        view = view[nbytes:] # slicing views is cheap
+        n -= nbytes
+    return str(buf)
 
 
 def create_md5_auth_packet(username, password, salt):
