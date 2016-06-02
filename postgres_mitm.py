@@ -237,6 +237,8 @@ class ClientConnection(threading.Thread):
         return read_n_bytes_from_socket(self.socket, n)
 
 
+    def read_n_bytes_from_server(self, n):
+        return read_n_bytes_from_socket(self.server_socket, n)
 
 
     def send_to_client(self, msg):
@@ -287,39 +289,42 @@ class ClientConnection(threading.Thread):
 
 
     def connect_to_actual_backend(self, password):
-        sock = socket.create_connection((self.target_backend, 5432))
-        sock.send('%(length)s%(version)s' % {
+        self.server_socket = socket.create_connection((self.target_backend, 5432))
+        packet = '%(length)s%(version)s' % {
             'length': struct.pack('!I', 8),
             'version': VERSION_SSL,
-        })
-        buffer_size = 1024
-        data = sock.recv(buffer_size)
+        }
+        self.server_socket.sendall(packet)
+        data = read_n_bytes_from_socket(self.server_socket, 1)
         assert data == 'S'
-        sock = self.ssl_context.wrap_socket(sock)
-        sock.do_handshake()
-        sock.send(self.startup_packet)
-        data = sock.recv()
-        _logger.debug('Got reply to startup: %s' % repr(data))
-        auth_request = parse_auth_request_packet(data)
+        self.server_socket = self.ssl_context.wrap_socket(self.server_socket)
+        self.server_socket.do_handshake()
+        self.server_socket.sendall(self.startup_packet)
+        raw_auth_request = self.receive_auth_request_from_backend()
+        _logger.debug('Got auth request: %s' % repr(raw_auth_request))
+        auth_request = parse_auth_request_packet(raw_auth_request)
         if auth_request.method == 'AUTH_REQ_MD5':
             # options is 4-byte salt
             salt = auth_request.options
             response = create_md5_auth_packet(self.options.get('user', ''), password, salt)
-            sock.send(response)
+            self.server_socket.sendall(response)
         else:
             _logger.debug('Unsupported backend auth method: %s' % auth_request.method)
             return False
-
-        self.server_socket = sock
-
-        # Receive auth response and forward to client
-        data = self.server_socket.recv()
-        self.socket.send(data)
 
         # Make socket non-blocking
         self.server_socket.setblocking(0)
 
         return True
+
+
+    def receive_auth_request_from_backend(self):
+        first_9_bytes = self.read_n_bytes_from_server(9)
+        assert first_9_bytes[0] == 'R'
+        packet_length = struct.unpack('!I', first_9_bytes[1:5])[0]
+        # Tag doesn't count on length, read the rest
+        the_rest = self.read_n_bytes_from_server(packet_length - 8)
+        return first_9_bytes + the_rest
 
 
     def listen_for_tls_handshake(self):
@@ -390,12 +395,7 @@ def parse_password_from_authentication_packet(data):
 
 def parse_auth_request_packet(data):
     # format is R<int32 length><int32 method>[<options>]
-    assert len(data) >= 9
-    assert data[0] == 'R'
-    raw_length = data[1:5]
-    length = struct.unpack('!I', raw_length)[0] # TODO: Unused
-    raw_method = data[5:9]
-    method = struct.unpack('!I', raw_method)[0]
+    method = struct.unpack('!I', data[5:9])[0]
     assert method in AUTH_METHODS_REVERSE
     textual_method = AUTH_METHODS_REVERSE[method]
     AuthRequest = namedtuple('AuthRequest', 'method options')
