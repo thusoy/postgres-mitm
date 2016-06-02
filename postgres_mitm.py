@@ -264,7 +264,7 @@ class ClientConnection(threading.Thread):
 
 
     def handle_authentication_request(self, data):
-        _logger.debug('Got auth request packet: %s' % repr(data))
+        _logger.debug('Got auth response packet: %s' % repr(data))
 
         password = parse_password_from_authentication_packet(data)
         if self.connect_to_actual_backend(password):
@@ -274,12 +274,7 @@ class ClientConnection(threading.Thread):
                 'host': self.target_backend,
                 'database': self.options.get('database', ''),
             }
-            auth_success = 'R%(length)s%(status)s' % {
-                'length': struct.pack('!I', 8),
-                'status': struct.pack('!I', AUTH_METHODS['AUTH_REQ_OK']),
-            }
-            _logger.info('Success! Intercepted auth: %s' % captured_uri)
-            self.socket.send(auth_success)
+            _logger.info('Intercepted auth: %s' % captured_uri)
             # Switch socket to non-blocking to enable messages to pass in
             # arbitrary order
             self.socket.setblocking(0)
