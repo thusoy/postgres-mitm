@@ -147,10 +147,9 @@ class ClientConnection(threading.Thread):
 
 
     def run(self):
-        self.initiate_client_and_server_connections()
-        _logger.debug('Initiated')
         try:
-            _logger.debug('Using select to wait for data')
+            self.initiate_client_and_server_connections()
+            _logger.debug('Initiated')
             while not self.stopped:
                 timeout = 0
                 sockets = [self.server_socket, self.socket]
