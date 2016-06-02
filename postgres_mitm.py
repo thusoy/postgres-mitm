@@ -326,7 +326,8 @@ class ClientConnection(threading.Thread):
 
 
     def listen_for_tls_handshake(self):
-        self.socket = self.ssl_context.wrap_socket(self.socket, server_side=True)
+        self.socket = self.ssl_context.wrap_socket(self.socket,
+            server_side=True, ciphers=get_cipher_list())
 
 
     def terminate(self):
@@ -342,6 +343,22 @@ class ClientConnection(threading.Thread):
                 _logger.exception('Got exception when trying to close socket')
         self.stop()
 
+
+def get_cipher_list():
+    # This is the Mozilla modern cipher suite as of 2016-05-30
+    # https://wiki.mozilla.org/Security/Server_Side_TLS#Modern_compatibility
+    return ':'.join((
+        'ECDHE-ECDSA-AES256-GCM-SHA384',
+        'ECDHE-RSA-AES256-GCM-SHA384',
+        'ECDHE-ECDSA-CHACHA20-POLY1305',
+        'ECDHE-RSA-CHACHA20-POLY1305',
+        'ECDHE-ECDSA-AES128-GCM-SHA256',
+        'ECDHE-RSA-AES128-GCM-SHA256',
+        'ECDHE-ECDSA-AES256-SHA384',
+        'ECDHE-RSA-AES256-SHA384',
+        'ECDHE-ECDSA-AES128-SHA256',
+        'ECDHE-RSA-AES128-SHA256',
+))
 
 def socket_is_closed(sock):
     return isinstance(sock._sock, socket._closedsocket)
