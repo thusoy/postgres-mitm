@@ -202,6 +202,13 @@ class ClientConnection(threading.Thread):
                         self.socket.close()
                         self.server_socket.shutdown(socket.SHUT_RDWR)
                         self.server_socket.close()
+        except ssl.SSLError as exc:
+                if exc.reason == 'TLSV1_ALERT_UNKNOWN_CA':
+                    _logger.info('Client had an established trust root, could'
+                        ' not intercept details.')
+                else:
+                    _logger.info('Got TLS error when establishing connection: %s', exc.strerror)
+                    raise
         finally:
             self.terminate()
 
