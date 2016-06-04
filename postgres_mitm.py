@@ -21,20 +21,20 @@ from __future__ import print_function
 
 import argparse
 import hashlib
+import logging
+import select
 import socket
 import ssl
-import select
 import struct
 import threading
 import time
-import logging
 from collections import namedtuple
 
 # Sent by client when requesting TLS connection (this is the magic version
 # 1234.5679 of the protocol, defined in pgcomm.h)
-SSL_STARTUP_RESPONSE = 'S'
 VERSION_SSL = '\x04\xd2\x16\x2f'
 VERSION_3   = '\x00\x03\x00\x00'
+SSL_STARTUP_RESPONSE = 'S'
 
 _logger = logging.getLogger(__name__)
 
