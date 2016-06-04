@@ -148,6 +148,7 @@ class ClientConnection(threading.Thread):
 
 
     def run(self):
+        buffer_size = 4096
         try:
             self.initiate_client_and_server_connections()
             _logger.debug('Initiated')
@@ -156,7 +157,7 @@ class ClientConnection(threading.Thread):
                 sockets = [self.server_socket, self.socket]
                 sockets_with_data = select.select(sockets, [], [], timeout)[0]
                 if self.socket in sockets_with_data:
-                    data = self.socket.read()
+                    data = self.socket.recv(buffer_size)
                     _logger.debug('Client -> Server: %s' % repr(data))
                     if data:
                         self.server_socket.send(data)
@@ -166,7 +167,7 @@ class ClientConnection(threading.Thread):
                         self.server_socket.close()
                         break
                 if self.server_socket in sockets_with_data:
-                    data = self.server_socket.read()
+                    data = self.server_socket.recv(buffer_size)
                     _logger.debug('Server -> Client: %s' % repr(data))
                     if data:
                         self.socket.send(data)
