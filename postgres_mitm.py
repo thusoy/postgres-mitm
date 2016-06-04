@@ -369,9 +369,7 @@ class ClientConnection(threading.Thread):
             if not sock:
                 continue
             try:
-                if not socket_is_closed(self.socket):
-                    self.socket.shutdown(socket.SHUT_RDWR)
-                self.socket.close()
+                sock.close()
             except:
                 _logger.exception('Got exception when trying to close socket')
         self.stop()
