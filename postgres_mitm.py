@@ -2,24 +2,22 @@ from __future__ import print_function
 
 # This script demonstrates how to setup a Man-in-the-Middle (MitM) attack on a
 # Postgres connection with SSLMODE=require or less. Attack is mitigated by
-# setting SSLMODE=verify or SSLMODE=verify-full, which requires you to get the
-# certificate of either your server or a CA that has signed it's certificate.
+# setting SSLMODE=verify-ca or SSLMODE=verify-full, which requires you to get
+# the certificate of either your server or a CA that has signed it's
+# certificate.
 
 # What the script does:
-# listen on socket for ssl startup messages
-# reply with 'S' (supported?)
-# Do TLS handshake with random cert/key
-# Tell client to authenticate over plaintext to capture the password
-# Initiate database connection to actual backend using the supplied password
-# Proxy all traffic between the client and the actual database
+# * Bind to 5432 and listen for incoming connections
+# * If someone connects over plaintext, request password to be sent in the clear
+# * If someone requests to connect over SSL, initiate the SSL connection with a
+#   self-signed certificate, then ask for password in plaintext
+# * Initiate TLS connection to actual database with the supplied credentials
+# * Proxy all traffic between the client and the actual database
 
-# The backend database to proxy must be given as an argument on the command
-# line for now, but in an actual attack you would read this from the redirect
-# fields on the IP packets or similar, depending on how you're performing the
-# attack.
+# The target database must be given as an argument on the command line.
 
 # PS: Please don't look to this script for examples of how to write good socket
-# code, this is just a quick proof of concept.
+# code, this is just a proof of concept.
 
 import argparse
 import hashlib
