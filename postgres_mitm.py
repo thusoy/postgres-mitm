@@ -22,10 +22,13 @@ from __future__ import print_function
 import argparse
 import hashlib
 import logging
+import os
 import select
 import socket
 import ssl
 import struct
+import tempfile
+import textwrap
 import threading
 import time
 from collections import namedtuple
@@ -55,6 +58,26 @@ AUTH_METHODS = {
 
 AUTH_METHODS_REVERSE = {val: key for key, val in AUTH_METHODS.items()}
 
+CERTIFICATE = textwrap.dedent('''\
+    -----BEGIN CERTIFICATE-----
+    MIIBFTCBvQIJAOVlsttuSJP1MAoGCCqGSM49BAMCMBUxEzARBgNVBAMMCnNlbGZz
+    aWduZWQwHhcNMTYwNTI5MTg0NDAzWhcNMjYwNTI3MTg0NDAzWjAVMRMwEQYDVQQD
+    DApzZWxmc2lnbmVkMFYwEAYHKoZIzj0CAQYFK4EEAAoDQgAER28qhX8p79zv7x0G
+    Mkqef7KfDXgmobUfcUKhmt5Eqn+8GnraVjvrzAs+6jMcLemUj1+dLbkmFKMtFolA
+    f0EDbjAKBggqhkjOPQQDAgNHADBEAiAD1hIlVDGKtKkRyCZISZ/UteZ1hBzaX00Q
+    g6qnOtZlcgIgCWlME+pNLmaSeMVx7unb6zFGNhDzfxeSSJEM5tlCGZs=
+    -----END CERTIFICATE-----
+
+    -----BEGIN EC PARAMETERS-----
+    BgUrgQQACg==
+    -----END EC PARAMETERS-----
+    -----BEGIN EC PRIVATE KEY-----
+    MHMCAQEEHyXy23774hq9CTorIFwGuppBUlXIZN0eOsjruDkJopigBwYFK4EEAAqh
+    RANCAARHbyqFfynv3O/vHQYySp5/sp8NeCahtR9xQqGa3kSqf7waetpWO+vMCz7q
+    Mxwt6ZSPX50tuSYUoy0WiUB/QQNu
+    -----END EC PRIVATE KEY-----
+    ''')
+
 
 def main():
     args = get_args()
@@ -77,9 +100,13 @@ def main():
     last_check_for_stopped_threads = time.time()
 
     try:
+        cert_file = tempfile.NamedTemporaryFile(delete=False)
+        with cert_file:
+            cert_file.write(CERTIFICATE)
         while True:
             client_socket, address = sock.accept()
-            client_handler = ClientConnection(client_socket, target_backend)
+            client_handler = ClientConnection(client_socket, target_backend,
+                cert_file.name)
             client_handler.start()
 
             threads.add(client_handler)
@@ -87,10 +114,11 @@ def main():
                 remove_stopped_threads(threads)
 
     except (KeyboardInterrupt, SystemExit):
-        _logger.info('Received exit, shutting down sockets')
+        _logger.info('Received exit, shutting down')
         sock.shutdown(socket.SHUT_RDWR)
         sock.close()
         stop_threads(threads)
+        os.remove(cert_file.name)
 
 
 def get_args():
@@ -122,14 +150,14 @@ def stop_threads(threads):
 
 class ClientConnection(threading.Thread):
 
-    def __init__(self, client_socket, target_backend):
+    def __init__(self, client_socket, target_backend, cert_file):
         super(ClientConnection, self).__init__()
         for proto in ('PROTOCOL_TLSv1_2', 'PROTOCOL_TLSv1', 'PROTOCOL_SSLv23'):
             protocol = getattr(ssl, proto, None)
             if protocol:
                 break
         self.ssl_context = ssl.SSLContext(protocol)
-        self.ssl_context.load_cert_chain(certfile='server.cert', keyfile='server.key')
+        self.ssl_context.load_cert_chain(certfile=cert_file)
         self.socket = client_socket
         self.target_backend = target_backend
         self.server_socket = None
