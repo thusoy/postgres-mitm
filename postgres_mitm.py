@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 from __future__ import print_function
 
 # This script demonstrates how to setup a Man-in-the-Middle (MitM) attack on a
