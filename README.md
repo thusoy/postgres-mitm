@@ -67,4 +67,4 @@ If you only have one database you can add its certificate to your trust store to
 
 If you're connecting to a database pool or are hosting many databases you should probably create your own Certificate Authority (CA) that can sign certificates for each database. Then the clients only need to trust the CA certificate and will have a secure connection to any of the databases signed by the CA.
 
-As always, consult the [excellent documentation](https://www.postgresql.org/docs/9.0/static/libpq-connect.html#LIBPQ-CONNECT-SSLMODE) for details.
+As always, consult the [excellent documentation](https://www.postgresql.org/docs/9.0/static/libpq-ssl.html) for details.
