@@ -87,7 +87,7 @@ def main():
     target_backend = args.backend
 
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.bind(('0.0.0.0', 5432))
+    sock.bind(('0.0.0.0', args.port))
 
     # max queued connections
     backlog = 5
@@ -128,6 +128,8 @@ def get_args():
     parser.add_argument('backend')
     parser.add_argument('-l', '--logging-level',
         choices=('debug', 'info', 'warning'), default='info')
+    parser.add_argument('-p', '--port', default=5432, type=int,
+        help='The local port to bind to. Default: %(default)s')
     return parser.parse_args()
 
 
