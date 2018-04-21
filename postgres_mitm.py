@@ -214,6 +214,8 @@ class ClientConnection(threading.Thread):
                 else:
                     _logger.info('Got TLS error when establishing connection: %s', exc.strerror)
                     raise
+        except Exception as exc:
+            _logger.exception('Got exception during protocol handling: %s' % exc)
         finally:
             self.terminate()
 
