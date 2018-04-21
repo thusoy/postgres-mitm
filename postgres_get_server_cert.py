@@ -21,7 +21,7 @@ def main():
         certificate_as_pem = get_certificate_from_socket(sock)
         print(certificate_as_pem.decode('utf-8'))
     except Exception as exc:
-        sys.stderr.write('Something failed while fetching certificate: {0}'.format(exc))
+        sys.stderr.write('Something failed while fetching certificate: {0}\n'.format(exc))
         sys.exit(1)
     finally:
         sock.close()
@@ -55,11 +55,12 @@ def request_ssl(sock):
     # 1234.5679 is the magic protocol version used to request TLS, defined
     # in pgcomm.h)
     version_ssl = postgres_protocol_version_to_binary(1234, 5679)
-    packet = struct.pack('!I', 8) + version_ssl
+    length = struct.pack('!I', 8)
+    packet = length + version_ssl
 
     sock.sendall(packet)
     data = read_n_bytes_from_socket(sock, 1)
-    if data != bytearray('S'.encode('utf-8')):
+    if data != b'S':
         raise Exception('Backend does not support TLS')
 
 
