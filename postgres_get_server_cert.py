@@ -6,7 +6,11 @@ import ssl
 import struct
 import subprocess
 import sys
-import urlparse
+
+try:
+    from urlparse import urlparse
+except ImportError:
+    from urllib.parse import urlparse
 
 
 def main():
@@ -15,10 +19,9 @@ def main():
     sock = socket.create_connection(target)
     try:
         certificate_as_pem = get_certificate_from_socket(sock)
-        print certificate_as_pem
+        print(certificate_as_pem.decode('utf-8'))
     except Exception as exc:
-        sys.stderr.write('Something failed while fetching certificate: %s' %
-            exc.message)
+        sys.stderr.write('Something failed while fetching certificate: {0}\n'.format(exc))
         sys.exit(1)
     finally:
         sock.close()
@@ -26,8 +29,7 @@ def main():
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument('database', help='Either an IP address, hostname or'
-        ' URL with host and port')
+    parser.add_argument('database', help='Either an IP address, hostname or URL with host and port')
     return parser.parse_args()
 
 
@@ -35,7 +37,7 @@ def get_target_address_from_args(args):
     specified_target = args.database
     if '//' not in specified_target:
         specified_target = '//' + specified_target
-    parsed = urlparse.urlparse(specified_target)
+    parsed = urlparse(specified_target)
     return (parsed.hostname, parsed.port or 5432)
 
 
@@ -53,14 +55,12 @@ def request_ssl(sock):
     # 1234.5679 is the magic protocol version used to request TLS, defined
     # in pgcomm.h)
     version_ssl = postgres_protocol_version_to_binary(1234, 5679)
+    length = struct.pack('!I', 8)
+    packet = length + version_ssl
 
-    packet = '%(length)s%(version)s' % {
-        'length': struct.pack('!I', 8),
-        'version': version_ssl,
-    }
     sock.sendall(packet)
     data = read_n_bytes_from_socket(sock, 1)
-    if data != 'S':
+    if data != b'S':
         raise Exception('Backend does not support TLS')
 
 
@@ -81,8 +81,7 @@ def encode_der_as_pem(cert):
     process = subprocess.Popen(cmd, stdin=pipe, stdout=pipe, stderr=pipe)
     stdout, stderr = process.communicate(cert)
     if stderr:
-        raise Exception('openssl errored when converting cert to PEM: %s' %
-            stderr)
+        raise Exception('OpenSSL error when converting cert to PEM: {0}'.format(stderr))
     return stdout.strip()
 
 
@@ -93,7 +92,7 @@ def read_n_bytes_from_socket(sock, n):
         nbytes = sock.recv_into(view, n)
         view = view[nbytes:] # slicing views is cheap
         n -= nbytes
-    return str(buf)
+    return buf
 
 
 def postgres_protocol_version_to_binary(major, minor):

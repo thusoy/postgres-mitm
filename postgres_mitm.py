@@ -29,6 +29,7 @@ import select
 import socket
 import ssl
 import struct
+import sys
 import tempfile
 import textwrap
 import threading
@@ -37,9 +38,10 @@ from collections import namedtuple
 
 # Sent by client when requesting TLS connection (this is the magic version
 # 1234.5679 of the protocol, defined in pgcomm.h)
-VERSION_SSL = '\x04\xd2\x16\x2f'
-VERSION_3   = '\x00\x03\x00\x00'
-SSL_STARTUP_RESPONSE = 'S'
+VERSION_SSL = b'\x04\xd2\x16\x2f'
+VERSION_3   = b'\x00\x03\x00\x00'
+SSL_STARTUP_RESPONSE = b'S'
+PY2 = sys.version_info < (3, 0, 0)
 
 _logger = logging.getLogger(__name__)
 
@@ -105,7 +107,7 @@ def main():
     try:
         cert_file = tempfile.NamedTemporaryFile(delete=False)
         with cert_file:
-            cert_file.write(CERTIFICATE)
+            cert_file.write(CERTIFICATE.encode('utf-8'))
         while True:
             client_socket, address = sock.accept()
             client_handler = ClientConnection(client_socket, target_backend,
@@ -214,6 +216,8 @@ class ClientConnection(threading.Thread):
                 else:
                     _logger.info('Got TLS error when establishing connection: %s', exc.strerror)
                     raise
+        except Exception as exc:
+            _logger.exception('Got exception during protocol handling: %s' % exc)
         finally:
             self.terminate()
 
@@ -263,8 +267,8 @@ class ClientConnection(threading.Thread):
     def wait_for_auth_request(self):
         # Format of message is <char tag><int32 len><message>
         first_5_bytes = self.read_n_bytes_from_client(5)
-        tag = first_5_bytes[0]
-        if tag != 'p':
+        tag = first_5_bytes[0:1]
+        if tag != b'p':
             raise Exception("Received non-auth request: %s" % tag)
 
         # Bump length with 1 to offset for tag
@@ -296,10 +300,9 @@ class ClientConnection(threading.Thread):
         self.startup_packet = data
         self.options = parse_options_from_startup_packet(data)
         _logger.debug('Startup packet processed successfully: %s' % self.options)
-        auth_reply = 'R%(length)s%(method)s' % {
-            'length': struct.pack('!I', 8),
-            'method': struct.pack('!I', AUTH_METHODS['AUTH_REQ_PASSWORD']),
-        }
+        length = struct.pack('!I', 8)
+        method = struct.pack('!I', AUTH_METHODS['AUTH_REQ_PASSWORD'])
+        auth_reply = b'R' + length + method
         _logger.debug('Replying to startup: %s' % repr(auth_reply))
         self.socket.send(auth_reply)
         return True
@@ -311,10 +314,10 @@ class ClientConnection(threading.Thread):
         password = parse_password_from_authentication_packet(data)
         if self.connect_to_actual_backend(password):
             captured_uri = 'postgres://%(user)s:%(password)s@%(host)s:5432/%(database)s' % {
-                'user': self.options.get('user', ''),
+                'user': self.options.get('user', b''),
                 'password': password,
                 'host': self.target_backend,
-                'database': self.options.get('database', ''),
+                'database': self.options.get('database', b''),
             }
             _logger.info('Intercepted auth: %s' % captured_uri)
             # Switch socket to non-blocking to enable messages to pass in
@@ -327,13 +330,11 @@ class ClientConnection(threading.Thread):
 
     def connect_to_actual_backend(self, password):
         self.server_socket = socket.create_connection((self.target_backend, 5432))
-        packet = '%(length)s%(version)s' % {
-            'length': struct.pack('!I', 8),
-            'version': VERSION_SSL,
-        }
+        length = struct.pack('!I', 8)
+        packet = length + VERSION_SSL
         self.server_socket.sendall(packet)
         data = read_n_bytes_from_socket(self.server_socket, 1)
-        assert data == 'S'
+        assert data == b'S'
         self.server_socket = self.ssl_context.wrap_socket(self.server_socket)
         self.server_socket.do_handshake()
         self.server_socket.sendall(self.startup_packet)
@@ -343,7 +344,7 @@ class ClientConnection(threading.Thread):
         if auth_request.method == 'AUTH_REQ_MD5':
             # options is 4-byte salt
             salt = auth_request.options
-            response = create_md5_auth_packet(self.options.get('user', ''), password, salt)
+            response = create_md5_auth_packet(self.options.get('user', b''), password, salt)
             self.server_socket.sendall(response)
         else:
             _logger.debug('Unsupported backend auth method: %s' % auth_request.method)
@@ -357,7 +358,7 @@ class ClientConnection(threading.Thread):
 
     def receive_auth_request_from_backend(self):
         first_9_bytes = self.read_n_bytes_from_server(9)
-        assert first_9_bytes[0] == 'R'
+        assert first_9_bytes[0:1] == b'R'
         packet_length = struct.unpack('!I', first_9_bytes[1:5])[0]
         # Tag doesn't count on length, read the rest
         the_rest = self.read_n_bytes_from_server(packet_length - 8)
@@ -391,40 +392,40 @@ def read_n_bytes_from_socket(sock, n):
         nbytes = sock.recv_into(view, n)
         view = view[nbytes:] # slicing views is cheap
         n -= nbytes
-    return str(buf)
+    return buf
 
 
 def create_md5_auth_packet(username, password, salt):
     pw_and_username = password + username
     pw_hash = hashlib.md5(pw_and_username).hexdigest()
-    salted_hash = 'md5' + hashlib.md5(pw_hash + salt).hexdigest()
-    response = 'p%(length)s%(salted_hash)s\0' % {
-        # 32 bytes of digest, four bytes length, 3 bytes for 'md5', one byte terminating null
-        'length': struct.pack('!I', 40),
-        'salted_hash': salted_hash,
-    }
-    return response
+    salted_hash = 'md5' + hashlib.md5(pw_hash.encode('utf-8') + salt).hexdigest()
+    # 32 bytes of digest, four bytes length, 3 bytes for 'md5', one byte terminating null
+    length = struct.pack('!I', 40)
+    return b'p' + length + salted_hash.encode('utf-8') + b'\x00'
 
 
 def parse_options_from_startup_packet(data):
     # format is <in32 length><in32 protocol>[<key>\0<value>\0]+\0
     raw_key_value_pairs = data[8:]
-    assert raw_key_value_pairs[-1] == '\0'
+    assert raw_key_value_pairs[-1] == 0
     raw_key_value_pairs = raw_key_value_pairs[0:-1]
-    assert raw_key_value_pairs.count('\0') % 2 == 0
+    if PY2:
+        assert raw_key_value_pairs.count('\0') % 2 == 0
+    else:
+        assert raw_key_value_pairs.count(0) % 2 == 0
 
     options = {}
-    key_value_pairs = data[8:].split('\0')
+    key_value_pairs = data[8:].split(b'\x00')
     for i in range(0, len(key_value_pairs), 2):
         key = key_value_pairs[i]
         value = key_value_pairs[i + 1]
-        options[key] = value
+        options[key.decode('utf-8')] = value
 
     return options
 
 
 def parse_password_from_authentication_packet(data):
-    assert data[-1] == '\0'
+    assert data[-1] == 0
     return data[5:-1]
 
 
