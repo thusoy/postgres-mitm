@@ -29,6 +29,7 @@ import select
 import socket
 import ssl
 import struct
+import sys
 import tempfile
 import textwrap
 import threading
@@ -40,6 +41,7 @@ from collections import namedtuple
 VERSION_SSL = b'\x04\xd2\x16\x2f'
 VERSION_3   = b'\x00\x03\x00\x00'
 SSL_STARTUP_RESPONSE = b'S'
+PY2 = sys.version_info < (3, 0, 0)
 
 _logger = logging.getLogger(__name__)
 
@@ -413,7 +415,10 @@ def parse_options_from_startup_packet(data):
     raw_key_value_pairs = data[8:]
     assert raw_key_value_pairs[-1] == 0
     raw_key_value_pairs = raw_key_value_pairs[0:-1]
-    assert raw_key_value_pairs.count(0) % 2 == 0
+    if PY2:
+        assert raw_key_value_pairs.count('\0') % 2 == 0
+    else:
+        assert raw_key_value_pairs.count(0) % 2 == 0
 
     options = {}
     key_value_pairs = data[8:].split(b'\x00')
