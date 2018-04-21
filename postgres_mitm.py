@@ -300,10 +300,9 @@ class ClientConnection(threading.Thread):
         self.startup_packet = data
         self.options = parse_options_from_startup_packet(data)
         _logger.debug('Startup packet processed successfully: %s' % self.options)
-        auth_reply = b'R%(length)s%(method)s' % {
-            b'length': struct.pack('!I', 8),
-            b'method': struct.pack('!I', AUTH_METHODS['AUTH_REQ_PASSWORD']),
-        }
+        length = struct.pack('!I', 8)
+        method = struct.pack('!I', AUTH_METHODS['AUTH_REQ_PASSWORD'])
+        auth_reply = b'R' + length + method
         _logger.debug('Replying to startup: %s' % repr(auth_reply))
         self.socket.send(auth_reply)
         return True
@@ -331,10 +330,8 @@ class ClientConnection(threading.Thread):
 
     def connect_to_actual_backend(self, password):
         self.server_socket = socket.create_connection((self.target_backend, 5432))
-        packet = b'%(length)s%(version)s' % {
-            b'length': struct.pack('!I', 8),
-            b'version': VERSION_SSL,
-        }
+        length = struct.pack('!I', 8)
+        packet = length + VERSION_SSL
         self.server_socket.sendall(packet)
         data = read_n_bytes_from_socket(self.server_socket, 1)
         assert data == b'S'
@@ -402,12 +399,9 @@ def create_md5_auth_packet(username, password, salt):
     pw_and_username = password + username
     pw_hash = hashlib.md5(pw_and_username).hexdigest()
     salted_hash = 'md5' + hashlib.md5(pw_hash.encode('utf-8') + salt).hexdigest()
-    response = b'p%(length)s%(salted_hash)s\x00' % {
-        # 32 bytes of digest, four bytes length, 3 bytes for 'md5', one byte terminating null
-        b'length': struct.pack('!I', 40),
-        b'salted_hash': salted_hash.encode('utf-8'),
-    }
-    return response
+    # 32 bytes of digest, four bytes length, 3 bytes for 'md5', one byte terminating null
+    length = struct.pack('!I', 40)
+    return b'p' + length + salted_hash.encode('utf-8') + b'\x00'
 
 
 def parse_options_from_startup_packet(data):
