@@ -66,7 +66,7 @@ def request_ssl(sock):
 
 def get_ssl_context():
     # Return the strongest SSL context available locally
-    for proto in ('PROTOCOL_TLSv1_2', 'PROTOCOL_TLSv1', 'PROTOCOL_SSLv23'):
+    for proto in ('PROTOCOL_TLSv1_3', 'PROTOCOL_TLSv1_2', 'PROTOCOL_TLSv1', 'PROTOCOL_SSLv23'):
         protocol = getattr(ssl, proto, None)
         if protocol:
             break
